@@ -1,6 +1,6 @@
 # loom-vs-reactive
 
-Spring MVC on virtual threads, Spring WebFlux, Kotlin coroutines and Go, with the same HTTP contract against the same Postgres. The question: for an I/O bound service, is reactive still worth what it costs to write and to debug?
+Spring MVC on virtual threads, Spring WebFlux and Kotlin coroutines, with the same HTTP contract against the same Postgres. The question: for an I/O bound service, is reactive still worth what it costs to write and to debug?
 
 Each app gets the same CPU and memory. Scenarios cover a healthy database, a slow database with the pool as the bottleneck, and load above capacity with an open model.
 

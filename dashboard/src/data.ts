@@ -1,4 +1,4 @@
-export const APPS = ['mvc-vt', 'mvc-platform', 'webflux', 'coroutines', 'go'] as const
+export const APPS = ['mvc-vt', 'mvc-platform', 'webflux', 'coroutines'] as const
 export const JDKS = ['mvc-vt-java21', 'mvc-vt-java25'] as const
 export const SERIES = [...APPS, ...JDKS] as const
 export type Series = (typeof SERIES)[number]

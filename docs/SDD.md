@@ -18,7 +18,7 @@ There is no reproducible comparison of MVC on virtual threads, WebFlux and corou
 
 ## 3. Goals
 
-* Same HTTP contract, same SQL, same resources for five contenders (see [PLAN §3](PLAN.md#3-contenders)).
+* Same HTTP contract, same SQL, same resources for four contenders (see [PLAN §3](PLAN.md#3-contenders)).
 * Throughput, latency percentiles, errors, CPU and memory per scenario.
 * Behavior past saturation, measured with an open model.
 * Cost of the code: lines, dependencies, stack trace depth.
@@ -28,7 +28,7 @@ There is no reproducible comparison of MVC on virtual threads, WebFlux and corou
 
 * Fastest possible app. Each app uses production config for its stack, not benchmark tricks.
 * Disk performance. The dataset fits in memory.
-* Frameworks beyond Spring and Go (see [§12 Q1](#12-open-questions)).
+* Stacks outside Spring, Go included (see [§10.4](#104-a-go-or-rust-reference) and [§12 Q1](#12-open-questions)).
 * Writes and transactions. The ledger project covers that.
 
 ---
@@ -56,7 +56,6 @@ Every box has its own CPU limit in `compose.yaml`. The app gets `APP_CPUS` and `
 | `mvc` | Spring MVC, `JdbcClient`, `RestClient`. `VIRTUAL_THREADS=true` or `false` picks the mode. | `apps/mvc` |
 | `webflux` | Spring WebFlux in Java, R2DBC, `WebClient`. | `apps/webflux` |
 | `coroutines` | Spring WebFlux in Kotlin with `suspend` handlers, R2DBC, `WebClient`. | `apps/coroutines` |
-| `go` | `net/http`, `pgxpool`. | `apps/go` |
 | `contract` | Black box HTTP suite, same for every app. | `contract` |
 | `loadgen` | Closed and open model, one CSV per run, body sampling. | `loadgen` |
 | `mock` | Rates API with latency, jitter, error rate from env. | `mock` |
@@ -128,13 +127,12 @@ Rules for the three calls, the same in every app:
 | `mvc` platform | Same code on a fixed platform pool of `FANOUT_THREADS` | Same. `FANOUT_THREADS` is 3 times `TOMCAT_MAX_THREADS`, so the fan-out pool never caps throughput before Tomcat does (H4) |
 | `webflux` | `Mono.zip` | r2dbc-pool `max-acquire-time` for the pool, `statementTimeout` for the query, `timeout(acquire + query)` per call as the client side guard. `timeout()` on the rate call. `zip` cancels the others on error |
 | `coroutines` | `coroutineScope { async {} }` | Same pool and statement settings as `webflux`, `withTimeout(acquire + query)` per database call, `withTimeout` on the rate call. The scope cancels the others on failure |
-| `go` | Goroutines, `sync.WaitGroup`, `context.WithCancelCause` | One `context.WithTimeout` for the acquire and one for the query, one for the rate. The first error calls `cancel(err)` and is the one the handler maps |
 
-So every app bounds the wait for a connection by `DB_ACQUIRE_TIMEOUT_MS` and the query by `DB_QUERY_TIMEOUT_MS`. Where the bound sits differs by stack: the JDBC query timeout cancels on the server and the client still waits for the answer, the reactive guard and the Go context end the call on the client. Under a frozen or very slow network the JVM apps answer at the socket timeout or the guard, Go at the query timeout. The contract suite accepts any `503` under `DB_SOCKET_TIMEOUT_S` plus 2 seconds and does not hide the difference.
+So every app bounds the wait for a connection by `DB_ACQUIRE_TIMEOUT_MS` and the query by `DB_QUERY_TIMEOUT_MS`. Where the bound sits differs by stack: the JDBC query timeout cancels on the server and the client still waits for the answer, the reactive guard ends the call on the client. Under a frozen or very slow network MVC answers at the socket timeout and the reactive apps at the guard. The contract suite accepts any `503` under `DB_SOCKET_TIMEOUT_S` plus 2 seconds and does not hide the difference.
 
 `StructuredTaskScope` is still preview in Java 25, so `mvc` does not use it. `cancel(true)` interrupts the thread: a virtual thread blocked on a socket read wakes up, a platform thread does not, and only the query timeout ends its call. That difference is part of what the benchmark shows, not something to hide.
 
-Rounding for `balanceUsdMinor`: half even, same in every app. The rate comes from the mock as a decimal string. JVM apps use `BigDecimal` with `RoundingMode.HALF_EVEN`. Go uses `big.Rat` and a small `roundHalfEven` helper, since `math/big` has no decimal rounding mode. The contract suite has cases that land exactly on `.5`.
+Rounding for `balanceUsdMinor`: half even, same in every app. The rate comes from the mock as a decimal string. Every app uses `BigDecimal` with `RoundingMode.HALF_EVEN`. Loadgen and the contract suite compute the expected value with `big.Rat` and a small `RoundHalfEven` helper in `loadgen/seed`. The contract suite has cases that land exactly on `.5`.
 
 ### 5.5 Scenarios
 
@@ -165,7 +163,7 @@ prime-bench header (`kind, lang, lang_version, mode, run_id, elapsed_s, cpus, bi
 | `timeouts` | Client side timeouts, apart from `errors` |
 | `bad_bodies` | Sampled responses that failed the body check |
 
-`mode` holds the concurrency model the app reports: `virtual`, `platform`, `reactor`, `coroutines`, `goroutines`. Files are named `<run_id>_<scenario>_<app>.csv`, and `legacy-lock` uses `mvc-vt-java21` and `mvc-vt-java25` as the app label. Requests sent during `RAMP_UP` are the warmup and are not recorded. The closed model writes one `summary` row. The open model writes one `summary` row per arrival rate, after the last in-flight request of every step is done, and measures latency from the time the request was due, not the time it left. `make bench` runs `ROUNDS` rounds with `-r<n>` appended to the run id.
+`mode` holds the concurrency model the app reports: `virtual`, `platform`, `reactor`, `coroutines`. Files are named `<run_id>_<scenario>_<app>.csv`, and `legacy-lock` uses `mvc-vt-java21` and `mvc-vt-java25` as the app label. Requests sent during `RAMP_UP` are the warmup and are not recorded. The closed model writes one `summary` row. The open model writes one `summary` row per arrival rate, after the last in-flight request of every step is done, and measures latency from the time the request was due, not the time it left. `make bench` runs `ROUNDS` rounds with `-r<n>` appended to the run id.
 
 ### 5.7 Failure modes inside the benchmark
 
@@ -225,12 +223,6 @@ loom-vs-reactive/
 │   │       ├── Errors.kt                       exceptions and withDeadline
 │   │       ├── ApiExceptionHandler.kt, StatsController.kt
 │   │       └── Model.kt                        data classes
-│   └── go/
-│       ├── Dockerfile           golang build, distroless run
-│       ├── go.mod, go.sum
-│       ├── main.go
-│       ├── handler.go, store.go (pgxpool), rates.go, stats.go
-│       └── handler_test.go, rates_test.go, store_test.go (TEST_DATABASE_URL)
 ├── contract/                    Go, BASE_URL env, run against any app
 │   ├── go.mod                   imports loadgen/seed through a replace directive
 │   └── contract_test.go
@@ -277,9 +269,8 @@ Checked on Maven Central, the Go module proxy and Docker Hub on 2026-11-04. JVM 
 | HikariCP | 7.0.2 | BOM |
 | r2dbc-postgresql | 1.1.3.RELEASE | BOM |
 | r2dbc-pool | 1.0.2.RELEASE | BOM. `spring-boot-starter-r2dbc` does not bring it, so the poms declare it (version still from the BOM). Without it Boot builds an unpooled `ConnectionFactory` |
-| Micrometer | 1.17.2 | BOM. Not used in v1: Actuator would add request observations to the JVM apps and not to Go. Pool use comes from `pg_stat_activity` if needed |
-| Go | 1.27 | Same as prime-bench |
-| pgx | v5.12.0 | `github.com/jackc/pgx/v5`, only Go dependency |
+| Micrometer | 1.17.2 | BOM. Not used in v1: Actuator would add request observations the benchmark does not need. Pool use comes from `pg_stat_activity` if needed |
+| Go | 1.27 | Loadgen, mock and the contract suite, same as prime-bench |
 | PostgreSQL image | 18.6 | `postgres:18.6` |
 | Toxiproxy | 2.13.0 | `ghcr.io/shopify/toxiproxy:2.13.0` |
 | Distroless | `static-debian12:nonroot` | Go images, as in prime-bench |
@@ -344,7 +335,7 @@ LEGACY_LOCK_STRIPES=1024
 SEED_ACCOUNTS=100000
 SEED_TXN_PER_ACCOUNT=50
 
-APPS=mvc-vt mvc-platform webflux coroutines go
+APPS=mvc-vt mvc-platform webflux coroutines
 SCENARIOS=read statement slow-db overload legacy-lock
 LEGACY_LOCK_JAVA_VERSIONS=21 25
 USERS=2000
@@ -363,7 +354,7 @@ DB_LATENCY_MS=20
 ARRIVAL_RATES=1000 2000 4000 8000
 ```
 
-`DB_LATENCY_MS` is a plain number because the Toxiproxy latency toxic takes milliseconds. `REQUEST_TIMEOUT` is the loadgen client timeout, counted in `timeouts`. Postgres listens on host port 15432 (`POSTGRES_PORT`) for the Go store tests, Toxiproxy on 8474 and the mock on 8090.
+`DB_LATENCY_MS` is a plain number because the Toxiproxy latency toxic takes milliseconds. `REQUEST_TIMEOUT` is the loadgen client timeout, counted in `timeouts`. Toxiproxy listens on host port 8474 and the mock on 8090.
 
 Spring properties that change per app:
 
@@ -389,11 +380,11 @@ spring:
       max-acquire-time: ${DB_ACQUIRE_TIMEOUT_MS}ms
 ```
 
-`initial-size` matches Hikari, which keeps `minimum-idle` equal to the pool size by default, and Go sets `MinConns` to the pool size. Every app starts with a full pool.
+`initial-size` matches Hikari, which keeps `minimum-idle` equal to the pool size by default. Every app starts with a full pool.
 
-The downstream clients get no connection cap, same rule as prime-bench: the JDK `HttpClient` has none, Reactor Netty gets `maxConnections(10000)` and no pending acquire limit (the default is 16 connections on 2 CPUs), and the Go transport keeps up to 10000 idle connections per host.
+The downstream clients get no connection cap, same rule as prime-bench: the JDK `HttpClient` has none, Reactor Netty gets `maxConnections(10000)` and no pending acquire limit (the default is 16 connections on 2 CPUs).
 
-Hikari takes `connection-timeout` as a number of milliseconds, a value like `2s` fails at startup. `JdbcTemplate` takes the query timeout in whole seconds: Boot drops the rest, so `1500` becomes 1 second and `500` becomes no timeout at all. `mvc` refuses to start unless `DB_QUERY_TIMEOUT_MS` is a whole number of seconds (`QueryTimeoutCheck`), so a sweep cannot leave one app without a query timeout. The R2DBC apps set `statementTimeout` and `connectTimeout` in a `ConnectionFactoryOptionsBuilderCustomizer` from the same variables. Go reads them too: `pool_max_conns`, `connect_timeout`, and a `context.WithTimeout` per acquire and per query.
+Hikari takes `connection-timeout` as a number of milliseconds, a value like `2s` fails at startup. `JdbcTemplate` takes the query timeout in whole seconds: Boot drops the rest, so `1500` becomes 1 second and `500` becomes no timeout at all. `mvc` refuses to start unless `DB_QUERY_TIMEOUT_MS` is a whole number of seconds (`QueryTimeoutCheck`), so a sweep cannot leave one app without a query timeout. The R2DBC apps set `statementTimeout` and `connectTimeout` in a `ConnectionFactoryOptionsBuilderCustomizer` from the same variables.
 
 `DB_SOCKET_TIMEOUT_S` is the last guard when Postgres stops answering. A frozen server enforces no `statement_timeout`, so only a client-side timeout ends the call.
 
@@ -409,7 +400,7 @@ Hikari takes `connection-timeout` as a number of milliseconds, a value like `2s`
 | Smoke bench | Every scenario, short duration, small load | CI, counts CSVs and compares headers |
 | Fairness | `statements.sh` digest equal across apps | CI after the smoke bench |
 
-CI jobs: `images` (build and unit tests inside each Dockerfile), `java` (`./mvnw verify` for the three Maven modules: surefire unit tests, failsafe `*IT` on Testcontainers, Spotless check), `go` (`go test ./...` with coverage, store tests on the compose Postgres), `contract`, `smoke`, `dashboard` (`npm ci`, oxlint, `tsc` and `vite build`), `sonar`, `secrets`. HTTP tests are named `*IT` so `package` inside the Dockerfile runs only the unit tests, since there is no Docker inside a Docker build. The dashboard only draws the CSVs and has no tests, so Sonar leaves it out of coverage.
+CI jobs: `images` (build and unit tests inside each Dockerfile), `java` (`./mvnw verify` for the three Maven modules: surefire unit tests, failsafe `*IT` on Testcontainers, Spotless check), `go` (`go test ./...` with coverage for loadgen and the mock), `contract`, `smoke`, `dashboard` (`npm ci`, oxlint, `tsc` and `vite build`), `sonar`, `secrets`. HTTP tests are named `*IT` so `package` inside the Dockerfile runs only the unit tests, since there is no Docker inside a Docker build. The dashboard only draws the CSVs and has no tests, so Sonar leaves it out of coverage.
 
 ---
 
@@ -429,6 +420,11 @@ CI jobs: `images` (build and unit tests inside each Dockerfile), `java` (`./mvnw
 
 **What:** separate `mvc-vt` and `mvc-platform` modules.
 **Why not:** same code is the point of H4. One image with one property removes any other difference.
+
+### 10.4 A Go or Rust reference
+
+**What:** run the same contract in Go (`net/http`, pgx) or Rust (axum, sqlx) next to the Spring apps, for scale.
+**Why not:** a native app sets the scale of every chart. In a smoke run Go used about a seventh of the CPU and a twentieth of the memory of the Spring apps, so the result reads as JVM against native, which is not the question. The question is which Spring stack to pick. Go was built and passed the contract suite, then was removed for that reason.
 
 ---
 

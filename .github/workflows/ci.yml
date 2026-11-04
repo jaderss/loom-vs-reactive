@@ -22,7 +22,6 @@ jobs:
           - { service: mvc-vt, arg: JAVA_VERSION, version: '25' }
           - { service: webflux, arg: JAVA_VERSION, version: '25' }
           - { service: coroutines, arg: JAVA_VERSION, version: '25' }
-          - { service: go, arg: GO_VERSION, version: '1.27' }
           - { service: mock, arg: GO_VERSION, version: '1.27' }
     steps:
       - uses: actions/checkout@v7
@@ -58,13 +57,9 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version: '1.27'
-      - name: Seeded Postgres for the store tests
-        run: SEED_ACCOUNTS=200 docker compose up -d --wait postgres
       - name: Test with coverage
-        env:
-          TEST_DATABASE_URL: postgres://bench:bench@localhost:15432/bench
         run: |
-          for module in apps/go mock loadgen; do
+          for module in mock loadgen; do
             (cd "$module" && test -z "$(gofmt -l .)" && go vet ./... && go test -coverprofile=coverage.out ./...)
           done
           (cd contract && go vet ./...)
@@ -79,7 +74,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        app: [mvc-vt, mvc-platform, webflux, coroutines, go]
+        app: [mvc-vt, mvc-platform, webflux, coroutines]
     steps:
       - uses: actions/checkout@v7
       - name: Contract suite, including database and downstream failures
@@ -93,12 +88,12 @@ jobs:
         run: make bench ${{ env.SMOKE }} ROUNDS=1 USERS=50 DURATION=5s RAMP_UP=2s ARRIVAL_RATES="50 100" RUN_ID=ci
       - name: CSV count and headers
         run: |
-          [ "$(ls results/ci-r1_*.csv | wc -l)" -eq 22 ] || { ls results; exit 1; }
+          [ "$(ls results/ci-r1_*.csv | wc -l)" -eq 18 ] || { ls results; exit 1; }
           for f in results/ci-r1_*.csv; do grep -q '^summary,' "$f" || { echo "no summary in $f"; exit 1; }; done
           [ "$(awk 'FNR == 1' results/ci-r1_*.csv | sort -u | wc -l)" -eq 1 ] || { awk 'FNR == 1 { print FILENAME ": " $0 }' results/ci-r1_*.csv; exit 1; }
       - name: No wrong bodies
         run: |
-          col=$(awk -F, 'NR == 1 { for (i = 1; i <= NF; i++) if ($i == "bad_bodies") print i; exit }' results/ci-r1_read_go.csv)
+          col=$(awk -F, 'NR == 1 { for (i = 1; i <= NF; i++) if ($i == "bad_bodies") print i; exit }' results/ci-r1_read_mvc-vt.csv)
           awk -F, -v c="$col" '$1 == "summary" && $c != 0 { print FILENAME ": " $c " bad bodies"; bad = 1 } END { exit bad }' results/ci-r1_*.csv
       - name: Same SQL in every app
         run: |

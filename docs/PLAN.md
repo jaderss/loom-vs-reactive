@@ -8,7 +8,7 @@
 
 ## 1. TL;DR
 
-Spring added WebFlux because blocking a platform thread per request was expensive. Virtual threads made blocking cheap again. This project measures if WebFlux and Kotlin coroutines still win anything over Spring MVC on virtual threads, with a real Postgres and a slow downstream API, and what each stack does when the connection pool runs out. Go with pgx runs the same contract as a reference.
+Spring added WebFlux because blocking a platform thread per request was expensive. Virtual threads made blocking cheap again. This project measures if WebFlux and Kotlin coroutines still win anything over Spring MVC on virtual threads, with a real Postgres and a slow downstream API, and what each stack does when the connection pool runs out.
 
 The output follows prime-bench: one `make bench`, one CSV per run, a dashboard, and a README that opens with the finding.
 
@@ -39,7 +39,6 @@ These are expectations, not results. The README reports what the runs show, incl
 | `mvc-platform` | Same image as `mvc-vt`, virtual threads off | Same | Same |
 | `webflux` | Spring WebFlux, Java | R2DBC `DatabaseClient`, r2dbc-pool | `WebClient` |
 | `coroutines` | Spring WebFlux, Kotlin `suspend` functions | R2DBC `DatabaseClient` with coroutine extensions | `WebClient` with `awaitBody` |
-| `go` | `net/http`, standard library | pgx `pgxpool` | `net/http` client |
 
 Each app runs the configuration a team would ship to production for that stack. Every config value that differs from the defaults has a written reason in `METHODOLOGY.md`. No app gets tuning the others did not get.
 
@@ -61,13 +60,13 @@ Done when: `make up` starts Postgres, Toxiproxy and the mock, and CI is green.
 ### Phase 1: Contract and data
 
 * Schema and seed in `db/init`, loaded by Postgres on first start. Apps never run migrations.
-* Black box contract suite in Go (`contract/`), pointed at any app through `BASE_URL`. The same suite runs against all five contenders.
+* Black box contract suite in Go (`contract/`), pointed at any app through `BASE_URL`. The same suite runs against all four contenders.
 
 Done when: the contract suite runs in CI and fails against a stub for the right reasons.
 
 ### Phase 2: Apps
 
-Order: `mvc` first, since it defines the reference behavior. Then `webflux`, `coroutines`, `go`.
+Order: `mvc` first, since it defines the reference behavior. Then `webflux`, `coroutines`.
 
 For each app:
 
@@ -76,13 +75,13 @@ For each app:
 3. Contract suite green.
 4. `/code-review` before the merge to `main`.
 
-Done when: all five pass the contract suite in CI and Sonar shows 80% coverage on new code.
+Done when: all four pass the contract suite in CI and Sonar shows 80% coverage on new code.
 
 ### Phase 3: Fairness pass
 
 * Same pool size, same timeouts, same JSON, same SQL text.
 * Short run per app, then compare `pg_stat_statements`: same statements, same calls per request.
-* Profile the slowest app before trusting its number (JFR or pprof). Fix real mistakes and write each fix in `METHODOLOGY.md`.
+* Profile the slowest app before trusting its number (JFR). Fix real mistakes and write each fix in `METHODOLOGY.md`.
 
 Done when: the statement digest matches across apps and every config difference has a reason.
 
@@ -96,7 +95,7 @@ Done when: `make bench` writes one CSV per app and scenario, and the CI smoke ru
 
 ### Phase 5: Analysis
 
-* Flame graphs (async-profiler, pprof) only for the two results that surprise the most.
+* Flame graphs (async-profiler) only for the two results that surprise the most.
 * Dashboard tab per scenario. Chart types and colors checked with the `dataviz` skill.
 * Optional: the same runs on Docker Desktop Kubernetes, as in prime-bench.
 
@@ -167,7 +166,6 @@ Done when: README and posts reviewed by Jader.
 | `pg_stat_statements` | Proof that every app runs the same SQL |
 | JFR, JDK Mission Control | JVM profile, virtual thread events such as `jdk.VirtualThreadPinned` |
 | async-profiler | CPU and allocation flame graphs |
-| Go pprof | Go profile |
 | scc | Lines of code per app |
 | SonarQube Cloud | Quality gate, coverage from JaCoCo and Go profiles |
 | GitHub Actions | Build, tests, contract suite, smoke bench |

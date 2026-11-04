@@ -180,7 +180,7 @@ export default function App() {
       <header className="page-header">
         <div>
           <h1>loom-vs-reactive</h1>
-          <p className="secondary">Spring MVC on virtual and platform threads, WebFlux, Kotlin coroutines and Go, with the same HTTP contract against the same Postgres.</p>
+          <p className="secondary">Spring MVC on virtual and platform threads, WebFlux and Kotlin coroutines, with the same HTTP contract against the same Postgres.</p>
         </div>
         {runs && runs.length > 0 && (
           <label className="run-picker">

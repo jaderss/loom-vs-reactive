@@ -12,7 +12,6 @@
   --series-mvc-platform: #eb6834;
   --series-webflux: #1baf7a;
   --series-coroutines: #eda100;
-  --series-go: #e87ba4;
   --series-mvc-vt-java25: #2a78d6;
   --series-mvc-vt-java21: #86b6ef;
   --status-critical: #d03b3b;
@@ -33,7 +32,6 @@
     --series-mvc-platform: #d95926;
     --series-webflux: #199e70;
     --series-coroutines: #c98500;
-    --series-go: #d55181;
     --series-mvc-vt-java25: #3987e5;
     --series-mvc-vt-java21: #1c5cab;
   }
@@ -53,7 +51,6 @@
   --series-mvc-platform: #d95926;
   --series-webflux: #199e70;
   --series-coroutines: #c98500;
-  --series-go: #d55181;
   --series-mvc-vt-java25: #3987e5;
   --series-mvc-vt-java21: #1c5cab;
 }
