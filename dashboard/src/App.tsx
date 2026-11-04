@@ -8,40 +8,45 @@ type Kind = 'closed' | 'open' | 'jdk'
 const closedLoad = (s: Summary) =>
   `${formatNumber(s.stats.concurrency.median)} virtual users, closed model, ${s.stats.cpus.median} CPUs and a pool of ${s.stats.pool_size.median} per app.`
 
-const TABS: { id: Scenario; title: string; kind: Kind; about: string; load: (s: Summary) => string }[] = [
+const TABS: { id: Scenario; title: string; kind: Kind; about: string; question: string; load: (s: Summary) => string }[] = [
   {
     id: 'read',
     title: 'Read',
     kind: 'closed',
-    about: 'GET /accounts/{id}: one query by primary key, no downstream call.',
+    about: 'The simplest call: GET /accounts/{id} reads one account by its id. One Postgres query, nothing else.',
+    question: 'With a healthy database, does Spring MVC on virtual threads keep up with WebFlux and coroutines?',
     load: closedLoad,
   },
   {
     id: 'statement',
     title: 'Statement',
     kind: 'closed',
-    about: 'GET /accounts/{id}/statement: account, last transactions and a rates call to the mock, in parallel. The mock adds latency and jitter.',
+    about: 'A bank statement: GET /accounts/{id}/statement makes three calls at the same time. It reads the account and its last 20 transactions from Postgres, and gets a USD rate from a mock HTTP API that answers in about 30 ms. Then it converts the balance and returns everything. This is the usual shape of a service that talks to a database and another API.',
+    question: 'Same question as Read, now with a slow API call in every request. Also: how far do platform threads fall behind once more than 200 requests are in flight?',
     load: closedLoad,
   },
   {
     id: 'slow-db',
     title: 'Slow database',
     kind: 'closed',
-    about: 'The statement endpoint with Toxiproxy adding latency to every Postgres reply.',
+    about: 'The statement call again, with 20 ms of network delay added to every Postgres reply (Toxiproxy sits between the apps and Postgres). Each query holds its connection longer, so the pool of 20 connections becomes the limit.',
+    question: 'When the connection pool is the bottleneck, does the thread model still matter, or do all stacks hit the same ceiling?',
     load: closedLoad,
   },
   {
     id: 'overload',
     title: 'Overload',
     kind: 'open',
-    about: 'The statement endpoint under an open model. The arrival rate steps from below capacity to above it, and latency counts from the time each request was due.',
+    about: 'The statement call sent at a fixed rate that steps from below to above what the apps can handle. In the other tabs each user waits for an answer before sending again. Here requests keep coming even when the app slows down, so the waiting shows up in latency, which counts from the moment each request was due.',
+    question: 'Past capacity, how does each stack fail: long queues, timeouts or memory?',
     load: (s) => `Fixed arrival rate per step, ${s.stats.cpus.median} CPUs and a pool of ${s.stats.pool_size.median} per app.`,
   },
   {
     id: 'legacy-lock',
     title: 'Legacy lock',
     kind: 'jdk',
-    about: 'mvc on virtual threads with a striped synchronized block around the rate call. On Java 21 a blocked virtual thread pins its carrier, on Java 25 it does not (JEP 491).',
+    about: 'mvc-vt on Java 21 and on Java 25, with a synchronized block around the rate call, the way old library code often does it. On Java 21 a virtual thread that waits inside synchronized holds one of the 2 carrier threads. Java 25 fixed that (JEP 491). Synthetic on purpose, so it stays apart from the main result.',
+    question: 'Is the Java 21 pinning problem with synchronized gone on Java 25?',
     load: closedLoad,
   },
 ]
@@ -134,15 +139,17 @@ function ScenarioSection({ run, tab }: { run: Run; tab: (typeof TABS)[number] })
   return (
     <section>
       <header className="section-header">
-        <div>
+        <div className="about">
           <p>{tab.about}</p>
+          <p><span className="label">Question:</span> {tab.question}</p>
           <p className="secondary">
             {tab.load(summaries[0])}{' '}
             {rounds === 1 ? 'One round.' : `Median of ${rounds} rounds${tab.kind === 'open' ? '.' : '; whiskers on the bars show the lowest and highest round.'}`}
           </p>
+          <p className="secondary">Higher is better for throughput. Lower is better for latency, memory, CPU, errors and timeouts.</p>
         </div>
-        <Legend series={series} />
       </header>
+      <Legend series={series} />
       {failed.length > 0 && (
         <p className="notice failed" role="alert">
           <span aria-hidden="true">✕</span> Failed run: {failed.map((s) => s.app).join(', ')} answered with wrong bodies. These numbers do not count.

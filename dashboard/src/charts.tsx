@@ -1,5 +1,5 @@
 import { Bar, BarChart, CartesianGrid, Cell, ErrorBar, LabelList, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { SERIES, type Metric, type Series, type SeriesPoint, type Summary } from './data'
+import { SERIES, SERIES_INFO, type Metric, type Series, type SeriesPoint, type Summary } from './data'
 import { formatNumber } from './format'
 import { useTheme } from './theme'
 
@@ -145,9 +145,16 @@ export function SeriesLines({ data, series, title, unit, x, log = false }: {
 export function Legend({ series }: { series: Series[] }) {
   const theme = useTheme()
   return (
-    <ul className="legend">
+    <ul className="legend" aria-label="What each color is">
       {series.map((s) => (
-        <li key={s}><span className="line-key" style={{ background: theme.series[s] }} />{s}</li>
+        <li key={s}>
+          <span className="legend-name">
+            <span className="line-key" style={{ background: theme.series[s] }} />
+            <strong>{s}</strong>
+            <span>{SERIES_INFO[s].name}</span>
+          </span>
+          <span className="legend-detail">{SERIES_INFO[s].detail}</span>
+        </li>
       ))}
     </ul>
   )

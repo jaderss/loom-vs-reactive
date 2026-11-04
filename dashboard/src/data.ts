@@ -3,6 +3,33 @@ export const JDKS = ['mvc-vt-java21', 'mvc-vt-java25'] as const
 export const SERIES = [...APPS, ...JDKS] as const
 export type Series = (typeof SERIES)[number]
 
+export const SERIES_INFO: Record<Series, { name: string; detail: string }> = {
+  'mvc-vt': {
+    name: 'Spring MVC, virtual threads',
+    detail: 'Plain blocking code. Every request and every parallel call gets its own virtual thread, and the JVM parks it while it waits on Postgres or the rates API.',
+  },
+  'mvc-platform': {
+    name: 'Spring MVC, platform threads',
+    detail: 'The same app and image as mvc-vt with virtual threads off, as Spring MVC ran before Java 21. Tomcat has 200 OS threads, so at most 200 requests run at once and the rest wait in a queue.',
+  },
+  webflux: {
+    name: 'Spring WebFlux, Java',
+    detail: 'Reactive code with Mono and Flux on a few event loop threads that never block. R2DBC for Postgres, WebClient for the rates API.',
+  },
+  coroutines: {
+    name: 'Spring WebFlux, Kotlin coroutines',
+    detail: 'The same reactive stack as webflux, written as Kotlin suspend functions, so the code reads like blocking code.',
+  },
+  'mvc-vt-java21': {
+    name: 'mvc-vt on Java 21',
+    detail: 'A virtual thread that waits inside a synchronized block pins its carrier thread. With 2 CPUs there are only 2 carriers.',
+  },
+  'mvc-vt-java25': {
+    name: 'mvc-vt on Java 25',
+    detail: 'JEP 491 removed that pinning: a virtual thread waiting inside synchronized gives its carrier back.',
+  },
+}
+
 export const SCENARIOS = ['read', 'statement', 'slow-db', 'overload', 'legacy-lock'] as const
 export type Scenario = (typeof SCENARIOS)[number]
 
