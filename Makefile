@@ -27,6 +27,13 @@ build:
 
 up:
 	$(COMPOSE) up -d --wait postgres toxiproxy mock
+	@want="$(SEED_ACCOUNTS) $$(( $(SEED_ACCOUNTS) * $(SEED_TXN_PER_ACCOUNT) ))"; \
+	have=$$($(COMPOSE) exec -T postgres psql -U bench -d bench -At -F ' ' \
+		-c "select (select count(*) from account), (select count(*) from txn)"); \
+	if [ "$$have" != "$$want" ]; then \
+		echo "Postgres holds $$have accounts and transactions, want $$want: reseeding"; \
+		$(COMPOSE) up -d --wait --force-recreate --renew-anon-volumes postgres toxiproxy; \
+	fi
 
 bench: build up | results
 	@for round in $$(seq 1 $(ROUNDS)); do \
