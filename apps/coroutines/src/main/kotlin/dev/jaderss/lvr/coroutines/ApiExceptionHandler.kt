@@ -1,6 +1,7 @@
 package dev.jaderss.lvr.coroutines
 
 import org.slf4j.LoggerFactory
+import org.springframework.dao.DataAccessException
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.http.ResponseEntity
@@ -24,8 +25,8 @@ class ApiExceptionHandler {
         return text(HttpStatus.BAD_GATEWAY, "downstream unavailable")
     }
 
-    @ExceptionHandler(DatabaseUnavailableException::class)
-    fun databaseUnavailable(e: DatabaseUnavailableException): ResponseEntity<String> {
+    @ExceptionHandler(DataAccessException::class)
+    fun databaseUnavailable(e: DataAccessException): ResponseEntity<String> {
         log.warn("database unavailable: {}", e.message)
         return text(HttpStatus.SERVICE_UNAVAILABLE, "database unavailable")
     }

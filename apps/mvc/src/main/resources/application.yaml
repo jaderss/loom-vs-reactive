@@ -27,7 +27,6 @@ server:
 bench:
   rates-url: ${RATES_URL:http://localhost:8090}
   downstream-timeout: ${DOWNSTREAM_TIMEOUT_MS:1000}ms
-  pool-size: ${POOL_SIZE:20}
   fanout-threads: ${FANOUT_THREADS:600}
   legacy-lock: ${LEGACY_LOCK:false}
   legacy-lock-stripes: ${LEGACY_LOCK_STRIPES:1024}

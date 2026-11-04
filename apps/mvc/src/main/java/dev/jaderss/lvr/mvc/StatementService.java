@@ -1,6 +1,5 @@
 package dev.jaderss.lvr.mvc;
 
-import dev.jaderss.lvr.mvc.model.Statement;
 import java.util.concurrent.ExecutorService;
 import org.springframework.stereotype.Service;
 

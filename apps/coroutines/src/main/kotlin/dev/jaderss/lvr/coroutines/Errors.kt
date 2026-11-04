@@ -6,18 +6,14 @@ import kotlinx.coroutines.withTimeout
 import java.time.Duration
 import kotlin.time.toKotlinDuration
 
-class AccountNotFoundException : RuntimeException("account not found")
+class AccountNotFoundException : RuntimeException("account not found", null, false, false)
 
-class InvalidLimitException : RuntimeException("limit out of range")
+class InvalidLimitException : RuntimeException("limit out of range", null, false, false)
 
 class DownstreamUnavailableException(
     message: String,
     cause: Throwable? = null,
 ) : RuntimeException(message, cause)
-
-class DatabaseUnavailableException(
-    cause: Throwable,
-) : RuntimeException(cause.toString(), cause)
 
 suspend fun <T> withDeadline(
     timeout: Duration,

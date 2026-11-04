@@ -9,6 +9,9 @@ import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.params.ParameterizedTest
 import org.junit.jupiter.params.provider.CsvSource
 import org.mockito.Mockito.mock
+import org.springframework.boot.r2dbc.autoconfigure.R2dbcProperties
+import org.springframework.dao.DataAccessResourceFailureException
+import org.springframework.dao.QueryTimeoutException
 import org.springframework.r2dbc.core.DatabaseClient
 import org.springframework.web.reactive.function.client.WebClient
 import java.math.BigDecimal
@@ -19,11 +22,10 @@ internal val PROPERTIES =
     BenchProperties(
         ratesUrl = "http://localhost",
         downstreamTimeout = Duration.ofSeconds(1),
-        poolSize = 20,
-        dbAcquireTimeout = Duration.ofSeconds(1),
         dbQueryTimeout = Duration.ofSeconds(1),
         dbSocketTimeout = Duration.ofSeconds(1),
     )
+internal val R2DBC = R2dbcProperties().apply { pool.maxAcquireTime = Duration.ofSeconds(1) }
 private val EUR_RATES = Rates(mapOf("EUR" to BigDecimal("1.0900")))
 private val TXN = Txn(1, Instant.parse("2026-01-01T01:00:00Z"), -4599, "card")
 
@@ -36,7 +38,7 @@ class StatementServiceTest {
         rates: suspend () -> Rates = { EUR_RATES },
     ): StatementService {
         val repository =
-            object : AccountRepository(mock(DatabaseClient::class.java), PROPERTIES) {
+            object : AccountRepository(mock(DatabaseClient::class.java), R2DBC, PROPERTIES) {
                 override suspend fun findAccount(id: Long) = account()
 
                 override suspend fun findTransactions(
@@ -95,9 +97,9 @@ class StatementServiceTest {
     fun databaseFailure() =
         runTest {
             val service =
-                service(transactions = { throw DatabaseUnavailableException(IllegalStateException("timeout")) })
+                service(transactions = { throw QueryTimeoutException("timeout") })
 
-            assertThrows<DatabaseUnavailableException> { service.statement(1, 20) }
+            assertThrows<QueryTimeoutException> { service.statement(1, 20) }
         }
 
     @Test
@@ -114,11 +116,12 @@ class StatementServiceTest {
     @DisplayName("a call past its deadline fails with the given exception, cancellation passes through")
     fun deadline() =
         runTest {
-            assertThrows<DatabaseUnavailableException> {
-                withDeadline(Duration.ofMillis(10), ::DatabaseUnavailableException) { awaitCancellation() }
+            val failure = { e: Throwable -> DataAccessResourceFailureException(e.toString(), e) }
+            assertThrows<DataAccessResourceFailureException> {
+                withDeadline(Duration.ofMillis(10), failure) { awaitCancellation() }
             }
-            assertThrows<DatabaseUnavailableException> {
-                withDeadline(Duration.ofSeconds(1), ::DatabaseUnavailableException) { error("refused") }
+            assertThrows<DataAccessResourceFailureException> {
+                withDeadline(Duration.ofSeconds(1), failure) { error("refused") }
             }
         }
 
@@ -126,6 +129,5 @@ class StatementServiceTest {
     @DisplayName("process stats parse the proc files")
     fun processStats() {
         assertThat(residentMegabytes("Name:\tjava\nVmRSS:\t   2048 kB\n")).isEqualTo(2.0)
-        assertThat(cpuSeconds("1 (my app) S 0 1 1 0 -1 4194560 100 0 0 0 250 150 0 0 20 0 8 0")).isEqualTo(4.0)
     }
 }

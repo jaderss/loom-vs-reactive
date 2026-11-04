@@ -5,9 +5,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import dev.jaderss.lvr.mvc.model.Account;
-import dev.jaderss.lvr.mvc.model.Rates;
-import dev.jaderss.lvr.mvc.model.Txn;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
@@ -48,7 +45,7 @@ class StatementServiceTest {
 
     private StatementService service(ExecutorService executor) {
         this.executor = executor;
-        var properties = new BenchProperties("http://localhost", Duration.ofSeconds(1), 20, 6, false, 0);
+        var properties = new BenchProperties("http://localhost", Duration.ofSeconds(1), 6, false, 0);
         return new StatementService(repository, ratesClient, new LegacyLock(properties), executor);
     }
 
@@ -137,7 +134,7 @@ class StatementServiceTest {
     @DisplayName("the legacy lock lets one call per stripe through at a time")
     void legacyLockSerializesAStripe() throws InterruptedException {
         executor = Executors.newVirtualThreadPerTaskExecutor();
-        var lock = new LegacyLock(new BenchProperties("http://localhost", Duration.ofSeconds(1), 20, 6, true, 4));
+        var lock = new LegacyLock(new BenchProperties("http://localhost", Duration.ofSeconds(1), 6, true, 4));
         var inside = new AtomicInteger();
         var mostInside = new AtomicInteger();
         for (int i = 0; i < 20; i++) {

@@ -9,7 +9,7 @@ import org.junit.jupiter.api.Test;
 class ExecutorConfigTest {
 
     private static final BenchProperties PROPERTIES =
-            new BenchProperties("http://localhost", Duration.ofSeconds(1), 20, 3, false, 0);
+            new BenchProperties("http://localhost", Duration.ofSeconds(1), 3, false, 0);
 
     @Test
     @DisplayName("mvc-platform fans out on named platform threads")

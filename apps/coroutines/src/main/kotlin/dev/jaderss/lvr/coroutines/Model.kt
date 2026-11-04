@@ -30,23 +30,17 @@ data class Statement(
     val balanceUsdMinor: Long,
     val transactions: List<Txn>,
 ) {
-    companion object {
-        fun of(
-            account: Account,
-            transactions: List<Txn>,
-            usdPerUnit: BigDecimal,
-        ) = Statement(
-            id = account.id,
-            owner = account.owner,
-            currency = account.currency,
-            balanceMinor = account.balanceMinor,
-            balanceUsdMinor =
-                BigDecimal
-                    .valueOf(account.balanceMinor)
-                    .multiply(usdPerUnit)
-                    .setScale(0, RoundingMode.HALF_EVEN)
-                    .longValueExact(),
-            transactions = transactions,
-        )
-    }
+    constructor(account: Account, transactions: List<Txn>, usdPerUnit: BigDecimal) : this(
+        account.id,
+        account.owner,
+        account.currency,
+        account.balanceMinor,
+        BigDecimal
+            .valueOf(
+                account.balanceMinor,
+            ).multiply(usdPerUnit)
+            .setScale(0, RoundingMode.HALF_EVEN)
+            .longValueExact(),
+        transactions,
+    )
 }

@@ -1,10 +1,11 @@
 package dev.jaderss.lvr.webflux;
 
-import dev.jaderss.lvr.webflux.model.Account;
-import dev.jaderss.lvr.webflux.model.Txn;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.List;
+import org.springframework.boot.r2dbc.autoconfigure.R2dbcProperties;
+import org.springframework.dao.DataAccessException;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.r2dbc.core.DatabaseClient;
 import org.springframework.stereotype.Repository;
 import reactor.core.publisher.Mono;
@@ -19,26 +20,24 @@ class AccountRepository {
     private final DatabaseClient db;
     private final Duration timeout;
 
-    AccountRepository(DatabaseClient db, BenchProperties properties) {
+    AccountRepository(DatabaseClient db, R2dbcProperties r2dbc, BenchProperties properties) {
         this.db = db;
-        this.timeout = properties.dbAcquireTimeout().plus(properties.dbQueryTimeout());
+        this.timeout = r2dbc.getPool().getMaxAcquireTime().plus(properties.dbQueryTimeout());
     }
 
     Mono<Account> findAccount(long id) {
-        return db.sql(ACCOUNT)
+        return guarded(db.sql(ACCOUNT)
                 .bind(0, id)
                 .map(row -> new Account(
                         row.get(0, Long.class),
                         row.get(1, String.class),
                         row.get(2, String.class),
                         row.get(3, Long.class)))
-                .one()
-                .timeout(timeout)
-                .onErrorMap(DatabaseUnavailableException::new);
+                .one());
     }
 
     Mono<List<Txn>> findTransactions(long accountId, int limit) {
-        return db.sql(TRANSACTIONS)
+        return guarded(db.sql(TRANSACTIONS)
                 .bind(0, accountId)
                 .bind(1, limit)
                 .map(row -> new Txn(
@@ -47,8 +46,13 @@ class AccountRepository {
                         row.get(2, Long.class),
                         row.get(3, String.class)))
                 .all()
-                .collectList()
-                .timeout(timeout)
-                .onErrorMap(DatabaseUnavailableException::new);
+                .collectList());
+    }
+
+    private <T> Mono<T> guarded(Mono<T> call) {
+        return call.timeout(timeout)
+                .onErrorMap(
+                        e -> !(e instanceof DataAccessException),
+                        e -> new DataAccessResourceFailureException(e.toString(), e));
     }
 }

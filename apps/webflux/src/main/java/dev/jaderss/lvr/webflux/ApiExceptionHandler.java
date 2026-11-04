@@ -2,6 +2,7 @@ package dev.jaderss.lvr.webflux;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -30,8 +31,8 @@ class ApiExceptionHandler {
         return text(HttpStatus.BAD_GATEWAY, "downstream unavailable");
     }
 
-    @ExceptionHandler(DatabaseUnavailableException.class)
-    ResponseEntity<String> databaseUnavailable(DatabaseUnavailableException e) {
+    @ExceptionHandler(DataAccessException.class)
+    ResponseEntity<String> databaseUnavailable(DataAccessException e) {
         log.warn("database unavailable: {}", e.getMessage());
         return text(HttpStatus.SERVICE_UNAVAILABLE, "database unavailable");
     }

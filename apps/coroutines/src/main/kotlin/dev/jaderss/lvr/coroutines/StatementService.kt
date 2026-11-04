@@ -20,6 +20,6 @@ class StatementService(
             val currency = account.await().currency
             val usdPerUnit =
                 rates.await().rates[currency] ?: throw DownstreamUnavailableException("no rate for $currency")
-            Statement.of(account.await(), transactions.await(), usdPerUnit)
+            Statement(account.await(), transactions.await(), usdPerUnit)
         }
 }

@@ -1,8 +1,6 @@
 package dev.jaderss.lvr.mvc;
 
-import dev.jaderss.lvr.mvc.model.Rates;
 import java.net.http.HttpClient;
-import java.util.Optional;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -26,9 +24,8 @@ class RatesClient {
 
     Rates usdRates() {
         try {
-            return Optional.ofNullable(client.get().uri("/rates").retrieve().body(Rates.class))
-                    .orElseThrow(() -> new DownstreamUnavailableException("empty rates body"));
-        } catch (RestClientException e) {
+            return client.get().uri("/rates").retrieve().requiredBody(Rates.class);
+        } catch (RestClientException | IllegalStateException e) {
             throw new DownstreamUnavailableException(e);
         }
     }

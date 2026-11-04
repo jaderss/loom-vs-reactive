@@ -4,9 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import dev.jaderss.lvr.webflux.model.Account;
-import dev.jaderss.lvr.webflux.model.Rates;
-import dev.jaderss.lvr.webflux.model.Txn;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
@@ -17,6 +14,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.springframework.dao.QueryTimeoutException;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
@@ -78,11 +76,10 @@ class StatementServiceTest {
     @DisplayName("a database failure surfaces as database unavailable")
     void databaseFailure() {
         accountWithBalance(150);
-        when(repository.findTransactions(1, 20))
-                .thenReturn(Mono.error(new DatabaseUnavailableException(new IllegalStateException("timeout"))));
+        when(repository.findTransactions(1, 20)).thenReturn(Mono.error(new QueryTimeoutException("timeout")));
         when(ratesClient.usdRates()).thenReturn(Mono.just(EUR_RATES));
 
-        StepVerifier.create(service.statement(1, 20)).verifyError(DatabaseUnavailableException.class);
+        StepVerifier.create(service.statement(1, 20)).verifyError(QueryTimeoutException.class);
     }
 
     @Test

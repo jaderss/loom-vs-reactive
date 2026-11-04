@@ -1,7 +1,5 @@
 package dev.jaderss.lvr.webflux;
 
-import dev.jaderss.lvr.webflux.model.Account;
-import dev.jaderss.lvr.webflux.model.Statement;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;

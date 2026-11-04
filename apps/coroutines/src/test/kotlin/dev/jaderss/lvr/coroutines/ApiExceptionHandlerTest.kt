@@ -3,6 +3,7 @@ package dev.jaderss.lvr.coroutines
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Test
 import org.mockito.Mockito.mock
+import org.springframework.dao.DataAccessResourceFailureException
 import org.springframework.http.MediaType
 import org.springframework.r2dbc.core.DatabaseClient
 import org.springframework.test.web.reactive.server.WebTestClient
@@ -11,9 +12,9 @@ import org.springframework.web.reactive.function.client.WebClient
 
 class ApiExceptionHandlerTest {
     private val failing =
-        object : AccountRepository(mock(DatabaseClient::class.java), PROPERTIES) {
+        object : AccountRepository(mock(DatabaseClient::class.java), R2DBC, PROPERTIES) {
             override suspend fun findAccount(id: Long): Account? =
-                throw DatabaseUnavailableException(IllegalStateException("pool exhausted"))
+                throw DataAccessResourceFailureException("pool exhausted")
         }
     private val client =
         WebTestClient

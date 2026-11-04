@@ -94,7 +94,7 @@ Seed with `generate_series`, deterministic, no `random()`. Owner is `owner-<id>`
 | `GET /accounts/{id}` | One query by primary key. | `200` with the account | `400` id not a number, `404` unknown id, `503` `database unavailable` |
 | `GET /accounts/{id}/statement?limit=20` | Three calls in parallel: account query, last `limit` transactions, rates from the mock. Converts the balance. | `200` with account, transactions, `balanceUsdMinor` | `400` id not a number or `limit` outside 1 to 100, `404` unknown id, `502` `downstream unavailable`, `503` `database unavailable` |
 | `GET /health` | Liveness only, no database call. | `200` `ok` | (none) |
-| `GET /stats` | Process stats for loadgen: app, lang, version, mode, CPUs, pool size, RSS, CPU seconds from `/proc/self`. | `200` with JSON | (none) |
+| `GET /stats` | Process stats for loadgen: app, lang, version, mode, CPUs, pool size, RSS from `/proc/self/status`, CPU seconds from the JDK's `OperatingSystemMXBean`. The pool size is read from the pool settings Boot bound (`HikariDataSource`, `R2dbcProperties`), not from a copy. | `200` with JSON | (none) |
 
 Error bodies are plain text: `bad request`, `account not found`, `downstream unavailable`, `database unavailable`. `/stats` takes the place of the `/stats` endpoint the prime-bench apps had, so loadgen reads RSS and CPU the same way for every app.
 
@@ -129,6 +129,8 @@ Rules for the three calls, the same in every app:
 | `coroutines` | `coroutineScope { async {} }` | Same pool and statement settings as `webflux`, `withTimeout(acquire + query)` per database call, `withTimeout` on the rate call. The scope cancels the others on failure |
 
 So every app bounds the wait for a connection by `DB_ACQUIRE_TIMEOUT_MS` and the query by `DB_QUERY_TIMEOUT_MS`. Where the bound sits differs by stack: the JDBC query timeout cancels on the server and the client still waits for the answer, the reactive guard ends the call on the client. Under a frozen or very slow network MVC answers at the socket timeout and the reactive apps at the guard. The contract suite accepts any `503` under `DB_SOCKET_TIMEOUT_S` plus 2 seconds and does not hide the difference.
+
+A database failure is a Spring `DataAccessException` in every app. `JdbcClient` and `DatabaseClient` translate driver errors, and the reactive apps wrap their client side timeout and pool errors in `DataAccessResourceFailureException`, so the three `ApiExceptionHandler`s map the same type to `503`.
 
 `StructuredTaskScope` is still preview in Java 25, so `mvc` does not use it. `cancel(true)` interrupts the thread: a virtual thread blocked on a socket read wakes up, a platform thread does not, and only the query timeout ends its call. That difference is part of what the benchmark shows, not something to hide.
 
@@ -205,7 +207,7 @@ loom-vs-reactive/
 │   │       │   ├── StatsController.java        /health and /stats
 │   │       │   ├── ApiExceptionHandler.java    @RestControllerAdvice, 400, 404, 502, 503
 │   │       │   ├── *Exception.java             account not found, downstream unavailable, invalid limit
-│   │       │   └── model/  Account.java, Txn.java, Statement.java, Rates.java (records)
+│   │       │   └── Account.java, Txn.java, Statement.java, Rates.java   package-private records
 │   │       ├── main/resources/application.yaml
 │   │       └── test/java/dev/jaderss/lvr/mvc/
 │   │           ├── AccountControllerIT.java    port 0, Testcontainers Postgres, rates stub (failsafe)
@@ -217,7 +219,7 @@ loom-vs-reactive/
 │   │       ├── Application.kt
 │   │       ├── Config.kt                       BenchProperties, R2DBC timeouts
 │   │       ├── AccountController.kt            suspend functions
-│   │       ├── AccountRepository.kt            DatabaseClient awaitSingleOrNull, flow
+│   │       ├── AccountRepository.kt            DatabaseClient awaitOneOrNull, flow
 │   │       ├── RatesClient.kt                  WebClient awaitBody
 │   │       ├── StatementService.kt             coroutineScope and async
 │   │       ├── Errors.kt                       exceptions and withDeadline

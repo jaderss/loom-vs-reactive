@@ -1,6 +1,5 @@
 package dev.jaderss.lvr.webflux;
 
-import dev.jaderss.lvr.webflux.model.Rates;
 import io.netty.channel.ChannelOption;
 import java.time.Duration;
 import org.springframework.http.client.reactive.ReactorClientHttpConnector;
@@ -36,7 +35,7 @@ class RatesClient {
                 .uri("/rates")
                 .retrieve()
                 .bodyToMono(Rates.class)
-                .switchIfEmpty(Mono.error(() -> new IllegalStateException("empty rates body")))
+                .single()
                 .timeout(timeout)
                 .onErrorMap(DownstreamUnavailableException::new);
     }

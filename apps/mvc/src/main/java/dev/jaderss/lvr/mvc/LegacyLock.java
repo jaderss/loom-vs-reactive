@@ -18,7 +18,7 @@ class LegacyLock {
         if (stripes.length == 0) {
             return call.get();
         }
-        synchronized (stripes[(int) Math.floorMod(accountId, (long) stripes.length)]) {
+        synchronized (stripes[Math.floorMod(accountId, stripes.length)]) {
             return call.get();
         }
     }

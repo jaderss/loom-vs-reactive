@@ -1,7 +1,5 @@
 package dev.jaderss.lvr.mvc;
 
-import dev.jaderss.lvr.mvc.model.Account;
-import dev.jaderss.lvr.mvc.model.Txn;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;

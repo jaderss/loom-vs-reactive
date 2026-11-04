@@ -1,6 +1,5 @@
 package dev.jaderss.lvr.webflux;
 
-import dev.jaderss.lvr.webflux.model.Statement;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 

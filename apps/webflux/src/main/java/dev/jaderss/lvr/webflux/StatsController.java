@@ -1,11 +1,15 @@
 package dev.jaderss.lvr.webflux;
 
+import static java.util.Map.entry;
+
+import com.sun.management.OperatingSystemMXBean;
 import java.io.IOException;
-import java.io.UncheckedIOException;
+import java.lang.management.ManagementFactory;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
+import org.springframework.boot.r2dbc.autoconfigure.R2dbcProperties;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -13,12 +17,14 @@ import org.springframework.web.bind.annotation.RestController;
 class StatsController {
 
     private static final Path STATUS = Path.of("/proc/self/status");
-    private static final Path STAT = Path.of("/proc/self/stat");
+    private static final Pattern SPACES = Pattern.compile("\\s+");
+    private static final OperatingSystemMXBean OS =
+            (OperatingSystemMXBean) ManagementFactory.getOperatingSystemMXBean();
 
     private final int poolSize;
 
-    StatsController(BenchProperties properties) {
-        this.poolSize = properties.poolSize();
+    StatsController(R2dbcProperties r2dbc) {
+        this.poolSize = r2dbc.getPool().getMaxSize();
     }
 
     @GetMapping("/health")
@@ -27,46 +33,24 @@ class StatsController {
     }
 
     @GetMapping("/stats")
-    Map<String, Object> stats() {
-        boolean linux = Files.isReadable(STAT);
-        return Map.of(
-                "app",
-                "webflux",
-                "lang",
-                "java",
-                "version",
-                System.getProperty("java.version"),
-                "mode",
-                "reactor",
-                "cpus",
-                Runtime.getRuntime().availableProcessors(),
-                "pool_size",
-                poolSize,
-                "rss_mb",
-                linux ? residentMegabytes(read(STATUS)) : 0.0,
-                "cpu_seconds",
-                linux ? cpuSeconds(read(STAT)) : 0.0);
+    Map<String, Object> stats() throws IOException {
+        boolean linux = Files.isReadable(STATUS);
+        return Map.ofEntries(
+                entry("app", "webflux"),
+                entry("lang", "java"),
+                entry("version", System.getProperty("java.version")),
+                entry("mode", "reactor"),
+                entry("cpus", Runtime.getRuntime().availableProcessors()),
+                entry("pool_size", poolSize),
+                entry("rss_mb", linux ? residentMegabytes(Files.readString(STATUS)) : 0.0),
+                entry("cpu_seconds", linux ? OS.getProcessCpuTime() / 1e9 : 0.0));
     }
 
     static double residentMegabytes(String status) {
         return status.lines()
                 .filter(line -> line.startsWith("VmRSS:"))
-                .mapToDouble(line -> Long.parseLong(line.split("\\s+")[1]) / 1024.0)
+                .mapToDouble(line -> Long.parseLong(SPACES.split(line)[1]) / 1024.0)
                 .findFirst()
                 .orElse(0);
-    }
-
-    static double cpuSeconds(String stat) {
-        List<String> fields =
-                List.of(stat.substring(stat.lastIndexOf(')') + 1).trim().split("\\s+"));
-        return (Long.parseLong(fields.get(11)) + Long.parseLong(fields.get(12))) / 100.0;
-    }
-
-    private static String read(Path path) {
-        try {
-            return Files.readString(path);
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
     }
 }

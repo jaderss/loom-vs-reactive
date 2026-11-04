@@ -12,8 +12,6 @@ import java.time.Duration
 data class BenchProperties(
     val ratesUrl: String,
     val downstreamTimeout: Duration,
-    val poolSize: Int,
-    val dbAcquireTimeout: Duration,
     val dbQueryTimeout: Duration,
     val dbSocketTimeout: Duration,
 )
