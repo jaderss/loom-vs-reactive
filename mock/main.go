@@ -101,7 +101,6 @@ func (m *mock) updateConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	m.current.Store(&next)
-	log.Printf("config latency=%s jitter=%s error_rate=%.2f", time.Duration(next.Latency), time.Duration(next.Jitter), next.ErrorRate)
 	m.serveConfig(w, r)
 }
 

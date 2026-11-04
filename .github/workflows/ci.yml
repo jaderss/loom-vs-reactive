@@ -97,7 +97,7 @@ jobs:
           awk -F, -v c="$col" '$1 == "summary" && $c != 0 { print FILENAME ": " $c " bad bodies"; bad = 1 } END { exit bad }' results/ci-r1_*.csv
       - name: Same SQL in every app
         run: |
-          for f in results/ci-r1_statement_*.sql.txt; do cut -d'|' -f1 "$f" | md5sum; done | sort -u > digests
+          for f in results/ci-r1_statement_*.sql.txt; do cut -d'|' -f1 "$f" | sha256sum; done | sort -u > digests
           cat results/ci-r1_statement_*.sql.txt
           [ "$(wc -l < digests)" -eq 1 ]
       - uses: actions/upload-artifact@v5

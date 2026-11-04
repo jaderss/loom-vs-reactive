@@ -17,7 +17,7 @@ case $scenario in
       -d "{\"name\":\"slow-db\",\"type\":\"latency\",\"stream\":\"downstream\",\"attributes\":{\"latency\":${DB_LATENCY_MS:-20}}}" >/dev/null
     ;;
   legacy-lock)
-    [ "$app" = mvc-vt ] || { echo "legacy-lock runs on mvc-vt only" >&2; exit 2; }
+    [[ $app == mvc-vt ]] || { echo "legacy-lock runs on mvc-vt only" >&2; exit 2; }
     java_version=${3:-${JAVA_VERSION:-25}}
     label=mvc-vt-java$java_version
     export JAVA_VERSION=$java_version LEGACY_LOCK=true
@@ -31,7 +31,7 @@ case $scenario in
 esac
 
 cleanup() {
-  [ -n "${stats_pid:-}" ] && kill "$stats_pid" 2>/dev/null
+  [[ -n ${stats_pid:-} ]] && kill "$stats_pid" 2>/dev/null
   docker compose stop "$app" >/dev/null 2>&1
   curl -fsS -X POST "$toxiproxy/reset" >/dev/null
   return 0
