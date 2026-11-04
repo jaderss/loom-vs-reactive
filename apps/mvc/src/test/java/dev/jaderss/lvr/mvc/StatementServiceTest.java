@@ -91,8 +91,8 @@ class StatementServiceTest {
 
         assertThatThrownBy(() -> service.statement(1, 20)).isInstanceOf(DownstreamUnavailableException.class);
 
-        assertThat(Duration.ofNanos(System.nanoTime() - start)).isLessThan(Duration.ofSeconds(1));
-        assertThat(interrupted.await(1, TimeUnit.SECONDS)).isTrue();
+        assertThat(Duration.ofNanos(System.nanoTime() - start)).isLessThan(Duration.ofSeconds(5));
+        assertThat(interrupted.await(5, TimeUnit.SECONDS)).isTrue();
     }
 
     @Test

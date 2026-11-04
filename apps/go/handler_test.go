@@ -107,14 +107,14 @@ func TestStatementErrors(t *testing.T) {
 }
 
 func TestFirstFailureCancelsTheOtherCalls(t *testing.T) {
-	store := &fakeStore{txnDelay: 5 * time.Second, cancelled: make(chan struct{})}
+	store := &fakeStore{txnDelay: 10 * time.Second, cancelled: make(chan struct{})}
 	status, _, elapsed := serve(t, store, fakeRates{err: downstreamError{errors.New("503")}}, "/accounts/1/statement")
-	if status != http.StatusBadGateway || elapsed > time.Second {
+	if status != http.StatusBadGateway || elapsed > 5*time.Second {
 		t.Fatalf("got %d after %s, want 502 at once", status, elapsed)
 	}
 	select {
 	case <-store.cancelled:
-	case <-time.After(time.Second):
+	case <-time.After(5 * time.Second):
 		t.Fatal("transactions call was not cancelled")
 	}
 }

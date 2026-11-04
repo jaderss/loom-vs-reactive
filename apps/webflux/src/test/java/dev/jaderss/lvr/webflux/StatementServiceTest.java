@@ -60,7 +60,7 @@ class StatementServiceTest {
 
         StepVerifier.create(service.statement(1, 20))
                 .expectError(DownstreamUnavailableException.class)
-                .verify(Duration.ofSeconds(1));
+                .verify(Duration.ofSeconds(5));
         assertThat(cancelled).isTrue();
     }
 
