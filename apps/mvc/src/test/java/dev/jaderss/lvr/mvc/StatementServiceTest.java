@@ -75,9 +75,11 @@ class StatementServiceTest {
     @MethodSource("executors")
     @DisplayName("the first failure ends the request and interrupts the calls still running")
     void firstFailureCancelsTheOthers(ExecutorService executor) throws InterruptedException {
+        var running = new CountDownLatch(1);
         var interrupted = new CountDownLatch(1);
         accountWithBalance(150);
         when(repository.findTransactions(1, 20)).thenAnswer(invocation -> {
+            running.countDown();
             try {
                 Thread.sleep(Duration.ofSeconds(10));
             } catch (InterruptedException e) {
@@ -85,7 +87,10 @@ class StatementServiceTest {
             }
             return List.of();
         });
-        when(ratesClient.usdRates()).thenThrow(new DownstreamUnavailableException("503"));
+        when(ratesClient.usdRates()).thenAnswer(invocation -> {
+            running.await();
+            throw new DownstreamUnavailableException("503");
+        });
         var service = service(executor);
         long start = System.nanoTime();
 
