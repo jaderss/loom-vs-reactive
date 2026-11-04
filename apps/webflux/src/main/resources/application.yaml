@@ -1,0 +1,22 @@
+spring:
+  main:
+    banner-mode: off
+  r2dbc:
+    url: r2dbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:bench}
+    username: ${DB_USER:bench}
+    password: ${DB_PASSWORD:bench}
+    pool:
+      initial-size: ${POOL_SIZE:20}
+      max-size: ${POOL_SIZE:20}
+      max-acquire-time: ${DB_ACQUIRE_TIMEOUT_MS:2000}ms
+
+server:
+  port: ${PORT:8080}
+
+bench:
+  rates-url: ${RATES_URL:http://localhost:8090}
+  downstream-timeout: ${DOWNSTREAM_TIMEOUT_MS:1000}ms
+  pool-size: ${POOL_SIZE:20}
+  db-acquire-timeout: ${DB_ACQUIRE_TIMEOUT_MS:2000}ms
+  db-query-timeout: ${DB_QUERY_TIMEOUT_MS:2000}ms
+  db-socket-timeout: ${DB_SOCKET_TIMEOUT_S:5}s

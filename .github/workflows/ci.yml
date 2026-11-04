@@ -1,0 +1,170 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  SMOKE: SEED_ACCOUNTS=2000 APP_CPUS=2 POSTGRES_CPUS=1 TOXIPROXY_CPUS=1 LOADGEN_CPUS=1 MOCK_CPUS=1
+
+jobs:
+  images:
+    name: image ${{ matrix.service }} ${{ matrix.version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { service: mvc-vt, arg: JAVA_VERSION, version: '21' }
+          - { service: mvc-vt, arg: JAVA_VERSION, version: '25' }
+          - { service: webflux, arg: JAVA_VERSION, version: '25' }
+          - { service: coroutines, arg: JAVA_VERSION, version: '25' }
+          - { service: go, arg: GO_VERSION, version: '1.27' }
+          - { service: mock, arg: GO_VERSION, version: '1.27' }
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build and unit test inside the image
+        run: ${{ matrix.arg }}=${{ matrix.version }} docker compose build ${{ matrix.service }}
+
+  java:
+    name: java ${{ matrix.module }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module: [mvc, webflux, coroutines]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - name: Unit tests, HTTP tests on Testcontainers, formatting
+        working-directory: apps/${{ matrix.module }}
+        run: ./mvnw -B verify
+      - uses: actions/upload-artifact@v5
+        with:
+          name: jacoco-${{ matrix.module }}
+          path: apps/${{ matrix.module }}/target/site/jacoco/jacoco.xml
+
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.27'
+      - name: Seeded Postgres for the store tests
+        run: SEED_ACCOUNTS=200 docker compose up -d --wait postgres
+      - name: Test with coverage
+        env:
+          TEST_DATABASE_URL: postgres://bench:bench@localhost:15432/bench
+        run: |
+          for module in apps/go mock loadgen; do
+            (cd "$module" && test -z "$(gofmt -l .)" && go vet ./... && go test -coverprofile=coverage.out ./...)
+          done
+          (cd contract && go vet ./...)
+      - uses: actions/upload-artifact@v5
+        with:
+          name: go-coverage
+          path: '**/coverage.out'
+
+  contract:
+    name: contract ${{ matrix.app }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [mvc-vt, mvc-platform, webflux, coroutines, go]
+    steps:
+      - uses: actions/checkout@v7
+      - name: Contract suite, including database and downstream failures
+        run: make contract APPS=${{ matrix.app }} ${{ env.SMOKE }}
+
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Every scenario for every app under a short load
+        run: make bench ${{ env.SMOKE }} ROUNDS=1 USERS=50 DURATION=5s RAMP_UP=2s ARRIVAL_RATES="50 100" RUN_ID=ci
+      - name: CSV count and headers
+        run: |
+          [ "$(ls results/ci-r1_*.csv | wc -l)" -eq 22 ] || { ls results; exit 1; }
+          for f in results/ci-r1_*.csv; do grep -q '^summary,' "$f" || { echo "no summary in $f"; exit 1; }; done
+          [ "$(awk 'FNR == 1' results/ci-r1_*.csv | sort -u | wc -l)" -eq 1 ] || { awk 'FNR == 1 { print FILENAME ": " $0 }' results/ci-r1_*.csv; exit 1; }
+      - name: No wrong bodies
+        run: |
+          col=$(awk -F, 'NR == 1 { for (i = 1; i <= NF; i++) if ($i == "bad_bodies") print i; exit }' results/ci-r1_read_go.csv)
+          awk -F, -v c="$col" '$1 == "summary" && $c != 0 { print FILENAME ": " $c " bad bodies"; bad = 1 } END { exit bad }' results/ci-r1_*.csv
+      - name: Same SQL in every app
+        run: |
+          for f in results/ci-r1_statement_*.sql.txt; do cut -d'|' -f1 "$f" | md5sum; done | sort -u > digests
+          cat results/ci-r1_statement_*.sql.txt
+          [ "$(wc -l < digests)" -eq 1 ]
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: smoke-results
+          path: results/
+
+  dashboard:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: dashboard
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '26'
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm run lint
+      - run: npm run build
+
+  sonar:
+    needs: [java, go]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+      - name: Compile for the scanner
+        run: for module in mvc webflux coroutines; do (cd apps/$module && ./mvnw -B -q test-compile); done
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: jacoco-*
+          path: coverage
+      - uses: actions/download-artifact@v5
+        with:
+          name: go-coverage
+          path: .
+      - name: Put JaCoCo reports where Sonar reads them
+        run: |
+          for module in mvc webflux coroutines; do
+            mkdir -p apps/$module/target/site/jacoco
+            cp coverage/jacoco-$module/jacoco.xml apps/$module/target/site/jacoco/
+          done
+      - uses: SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9 # v8.3.0
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

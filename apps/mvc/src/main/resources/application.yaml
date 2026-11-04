@@ -1,0 +1,33 @@
+spring:
+  main:
+    banner-mode: off
+  threads:
+    virtual:
+      enabled: ${VIRTUAL_THREADS:true}
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:bench}
+    username: ${DB_USER:bench}
+    password: ${DB_PASSWORD:bench}
+    hikari:
+      maximum-pool-size: ${POOL_SIZE:20}
+      connection-timeout: ${DB_ACQUIRE_TIMEOUT_MS:2000}
+      data-source-properties:
+        socketTimeout: ${DB_SOCKET_TIMEOUT_S:5}
+        connectTimeout: ${DB_SOCKET_TIMEOUT_S:5}
+  jdbc:
+    template:
+      query-timeout: ${DB_QUERY_TIMEOUT_MS:2000}ms
+
+server:
+  port: ${PORT:8080}
+  tomcat:
+    threads:
+      max: ${TOMCAT_MAX_THREADS:200}
+
+bench:
+  rates-url: ${RATES_URL:http://localhost:8090}
+  downstream-timeout: ${DOWNSTREAM_TIMEOUT_MS:1000}ms
+  pool-size: ${POOL_SIZE:20}
+  fanout-threads: ${FANOUT_THREADS:600}
+  legacy-lock: ${LEGACY_LOCK:false}
+  legacy-lock-stripes: ${LEGACY_LOCK_STRIPES:1024}
