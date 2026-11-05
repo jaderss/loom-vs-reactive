@@ -13,6 +13,7 @@ extra=()
 case $scenario in
   read | statement | overload) ;;
   slow-db)
+    extra=(-e "USERS=${SLOW_DB_USERS:-600}")
     curl -fsS -X POST "$toxiproxy/proxies/postgres/toxics" \
       -d "{\"name\":\"slow-db\",\"type\":\"latency\",\"stream\":\"downstream\",\"attributes\":{\"latency\":${DB_LATENCY_MS:-20}}}" >/dev/null
     ;;
@@ -22,7 +23,7 @@ case $scenario in
     label=mvc-vt-java$java_version
     export JAVA_VERSION=$java_version LEGACY_LOCK=true
     export JAVA_OPTS="${JAVA_OPTS:-} -XX:StartFlightRecording=filename=/results/${run_id}_legacy-lock_${label}.jfr,settings=default"
-    extra=(-e "APP_LABEL=$label")
+    extra=(-e "APP_LABEL=$label" -e "USERS=${LEGACY_LOCK_USERS:-100}")
     ;;
   *)
     echo "unknown scenario $scenario" >&2
@@ -48,5 +49,12 @@ done >"results/${run_id}_${scenario}_${label}.docker.txt" &
 stats_pid=$!
 
 docker compose run --rm -e "TARGET=http://$app:8080" -e "SCENARIO=$scenario" "${extra[@]}" loadgen
+
+if ! curl -fsS -m 5 "http://$(docker compose port "$app" 8080)/stats" >/dev/null; then
+  echo "$app did not answer /stats after the run, saving a thread dump" >&2
+  docker compose kill -s QUIT "$app" >/dev/null 2>&1 || true
+  sleep 3
+  docker compose logs --no-color "$app" >"results/${run_id}_${scenario}_${label}.stall.txt"
+fi
 
 scripts/statements.sh >"results/${run_id}_${scenario}_${label}.sql.txt"

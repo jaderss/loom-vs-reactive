@@ -28,9 +28,9 @@ All four run on Spring Boot 4.1.2 and Java 25, with 2 CPUs, 1.5 GB, ParallelGC a
 |---|---|
 | `read` | `GET /accounts/{id}`: one query by primary key |
 | `statement` | `GET /accounts/{id}/statement`: account, last 20 transactions and a rate from a mock API, in parallel. The mock answers in 30 ms ± 10 ms |
-| `slow-db` | `statement` with 20 ms added to every Postgres reply by Toxiproxy, so the pool of 20 connections is the limit |
+| `slow-db` | `statement` with 20 ms added to every Postgres reply by Toxiproxy, so the pool of 20 connections is the limit. 600 users |
 | `overload` | `statement` at a fixed arrival rate that steps from 1,000 to 8,000 requests per second |
-| `legacy-lock` | `statement` on `mvc-vt` with a `synchronized` block around the rate call, on Java 21 and on Java 25 |
+| `legacy-lock` | `statement` on `mvc-vt` with a `synchronized` block around the rate call, on Java 21 and on Java 25. 100 users |
 
 Loadgen checks a sample of response bodies against the seed. An app that answers fast with wrong data fails the run.
 
@@ -90,6 +90,7 @@ Every run writes to `results/`, named `<run id>-r<round>_<scenario>_<app>`:
 | `.csv` | Throughput, latency percentiles (p50 to p99.9, nearest rank), errors, timeouts, wrong bodies, memory and CPU. One `interval` row per second, one `summary` row per run (per arrival rate for `overload`) |
 | `.sql.txt` | The SQL the app sent, from `pg_stat_statements`. The text must match across apps |
 | `.docker.txt` | `docker stats` every 5 seconds, to check Postgres or loadgen was not the bottleneck |
+| `.stall.txt` | Only when the app stops answering `/stats`: its log with a thread dump |
 | `.jfr` | Flight recordings from `legacy-lock`, with a `jdk.VirtualThreadPinned` event for every pinned thread (command below) |
 
 To count the pinned threads without a JDK on the host:

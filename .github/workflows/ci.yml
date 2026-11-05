@@ -85,7 +85,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Every scenario for every app under a short load
-        run: make bench ${{ env.SMOKE }} ROUNDS=1 USERS=50 DURATION=5s RAMP_UP=2s ARRIVAL_RATES="50 100" RUN_ID=ci
+        run: make bench ${{ env.SMOKE }} ROUNDS=1 USERS=50 SLOW_DB_USERS=50 LEGACY_LOCK_USERS=50 DURATION=5s RAMP_UP=2s ARRIVAL_RATES="50 100" RUN_ID=ci
       - name: CSV count and headers
         run: |
           [ "$(ls results/ci-r1_*.csv | wc -l)" -eq 18 ] || { ls results; exit 1; }

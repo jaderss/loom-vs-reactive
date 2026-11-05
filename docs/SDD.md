@@ -142,13 +142,17 @@ Rounding for `balanceUsdMinor`: half even, same in every app. The rate comes fro
 |---|---|---|---|---|
 | `read` | `/accounts/{id}` | (none) | Closed | H1 |
 | `statement` | `/statement` | Mock latency and jitter | Closed | H1, H4 |
-| `slow-db` | `/statement` | Toxiproxy latency on Postgres | Closed | H2 |
+| `slow-db` | `/statement` | Toxiproxy latency on Postgres | Closed, `SLOW_DB_USERS` | H2 |
 | `overload` | `/statement` | Mock latency | Open, arrival rate stepped above capacity | H3 |
-| `legacy-lock` | `/statement` with `LEGACY_LOCK=true` | A `synchronized` block on a striped monitor (`LEGACY_LOCK_STRIPES`, picked by account id) around the rate call. `mvc` virtual only, Java 21 and 25 | Closed | H6 |
+| `legacy-lock` | `/statement` with `LEGACY_LOCK=true` | A `synchronized` block on a striped monitor (`LEGACY_LOCK_STRIPES`, picked by account id) around the rate call. `mvc` virtual only, Java 21 and 25 | Closed, `LEGACY_LOCK_USERS` | H6 |
 
 The lock in `legacy-lock` is striped on purpose. One global lock lets one request through at a time on both Java versions, which measures contention, not pinning. With many stripes there is almost no contention, but each virtual thread still blocks on I/O inside a monitor. On Java 21 that pins the carrier thread, and with 2 CPUs there are 2 carriers. On Java 25 it does not pin (JEP 491). JFR records `jdk.VirtualThreadPinned` in both runs as proof.
 
 Account ids follow a uniform distribution over the seeded range. Capacity for `overload` comes from the `statement` run on the same machine: the step goes from below to above that number.
+
+`slow-db` and `legacy-lock` run with fewer users than the other scenarios. On the first full run at 2,000 users, `slow-db` went far past the pool's capacity: the ceiling was about 430 statements per second, and `mvc-vt` completed nothing, because every virtual thread waited on Hikari at once and passed the 2 second acquire timeout. That collapse is a result in itself, but H2 asks for the ceiling, so `SLOW_DB_USERS` is 600, about 1.4 times the ceiling. On Java 21, `legacy-lock` lets about 66 requests per second through the lock (2 carriers, about 30 ms per rate call), so at 2,000 users nothing answered at all. `LEGACY_LOCK_USERS` is 100, so Java 21 still answers and the gap with Java 25 shows in the numbers.
+
+When an app does not answer `/stats` after a run, `bench.sh` sends it `SIGQUIT` and saves the log with the thread dump as `.stall.txt`. On the first full run, `mvc-vt` stalled once in `statement`, idle and not answering for the whole run, and did not stall again in 16 repeated runs.
 
 ### 5.6 CSV schema
 
@@ -341,6 +345,8 @@ APPS=mvc-vt mvc-platform webflux coroutines
 SCENARIOS=read statement slow-db overload legacy-lock
 LEGACY_LOCK_JAVA_VERSIONS=21 25
 USERS=2000
+SLOW_DB_USERS=600
+LEGACY_LOCK_USERS=100
 THINK_TIME=1s
 DURATION=60s
 RAMP_UP=15s
